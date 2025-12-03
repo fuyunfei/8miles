@@ -1,21 +1,31 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import logo from "/assets/openai-logomark.svg";
 import EventLog from "./EventLog";
+import BattleLog from "./BattleLog";
 import SessionControls from "./SessionControls";
-import ToolPanel from "./ToolPanel";
+import RhymePanel from "./RhymePanel";
+import SettingsPanel from "./SettingsPanel";
 
 export default function App() {
   const [isSessionActive, setIsSessionActive] = useState(false);
   const [events, setEvents] = useState([]);
   const [dataChannel, setDataChannel] = useState(null);
+  const [currentRhyme, setCurrentRhyme] = useState(null);
+  const [showBattleView, setShowBattleView] = useState(true); // 默认显示Battle视图
+  const [sessionSettings, setSessionSettings] = useState(null);
   const peerConnection = useRef(null);
   const audioElement = useRef(null);
 
   async function startSession() {
-    // Get a session token for OpenAI Realtime API
-    const tokenResponse = await fetch("/token");
+    // Get a session token for OpenAI Realtime API with settings
+    const tokenResponse = await fetch("/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(sessionSettings || {}),
+    });
     const data = await tokenResponse.json();
-    const EPHEMERAL_KEY = data.value;
+    const EPHEMERAL_KEY = data.client_secret?.value || data.value;
+    const model = data.model || sessionSettings?.model || "gpt-realtime";
 
     // Create a peer connection
     const pc = new RTCPeerConnection();
@@ -40,7 +50,6 @@ export default function App() {
     await pc.setLocalDescription(offer);
 
     const baseUrl = "https://api.openai.com/v1/realtime/calls";
-    const model = "gpt-realtime";
     const sdpResponse = await fetch(`${baseUrl}?model=${model}`, {
       method: "POST",
       body: offer.sdp,
@@ -120,6 +129,16 @@ export default function App() {
     sendClientEvent({ type: "response.create" });
   }
 
+  // Handle rhyme change from RhymePanel
+  const handleRhymeChange = useCallback((rhyme) => {
+    setCurrentRhyme(rhyme);
+  }, []);
+
+  // Handle settings change from SettingsPanel
+  const handleSettingsChange = useCallback((settings) => {
+    setSessionSettings(settings);
+  }, []);
+
   // Attach event listeners to the data channel when a new one is created
   useEffect(() => {
     if (dataChannel) {
@@ -137,6 +156,11 @@ export default function App() {
       dataChannel.addEventListener("open", () => {
         setIsSessionActive(true);
         setEvents([]);
+
+        // Let AI speak first - trigger initial response
+        setTimeout(() => {
+          dataChannel.send(JSON.stringify({ type: "response.create" }));
+        }, 500);
       });
     }
   }, [dataChannel]);
@@ -146,13 +170,31 @@ export default function App() {
       <nav className="absolute top-0 left-0 right-0 h-16 flex items-center">
         <div className="flex items-center gap-4 w-full m-4 pb-2 border-0 border-b border-solid border-gray-200">
           <img style={{ width: "24px" }} src={logo} />
-          <h1>realtime console</h1>
+          <h1>8 Miles</h1>
+          <div className="ml-auto flex gap-2">
+            <button
+              onClick={() => setShowBattleView(true)}
+              className={`px-3 py-1 rounded text-sm ${showBattleView ? "bg-purple-600 text-white" : "bg-gray-200"}`}
+            >
+              Battle
+            </button>
+            <button
+              onClick={() => setShowBattleView(false)}
+              className={`px-3 py-1 rounded text-sm ${!showBattleView ? "bg-purple-600 text-white" : "bg-gray-200"}`}
+            >
+              Debug
+            </button>
+          </div>
         </div>
       </nav>
       <main className="absolute top-16 left-0 right-0 bottom-0">
         <section className="absolute top-0 left-0 right-[380px] bottom-0 flex">
           <section className="absolute top-0 left-0 right-0 bottom-32 px-4 overflow-y-auto">
-            <EventLog events={events} />
+            {showBattleView ? (
+              <BattleLog events={events} rhymeWords={currentRhyme?.words || []} />
+            ) : (
+              <EventLog events={events} />
+            )}
           </section>
           <section className="absolute h-32 left-0 right-0 bottom-0 p-4">
             <SessionControls
@@ -165,12 +207,14 @@ export default function App() {
             />
           </section>
         </section>
-        <section className="absolute top-0 w-[380px] right-0 bottom-0 p-4 pt-0 overflow-y-auto">
-          <ToolPanel
-            sendClientEvent={sendClientEvent}
-            sendTextMessage={sendTextMessage}
-            events={events}
+        <section className="absolute top-0 w-[380px] right-0 bottom-0 p-4 pt-0 overflow-y-auto border-l border-gray-200">
+          <SettingsPanel
+            onSettingsChange={handleSettingsChange}
+            disabled={isSessionActive}
+          />
+          <RhymePanel
             isSessionActive={isSessionActive}
+            onRhymeChange={handleRhymeChange}
           />
         </section>
       </main>

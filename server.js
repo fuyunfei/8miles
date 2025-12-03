@@ -4,6 +4,7 @@ import { createServer as createViteServer } from "vite";
 import "dotenv/config";
 
 const app = express();
+app.use(express.json());
 app.use(express.text());
 const port = process.env.PORT || 3111;
 const apiKey = process.env.OPENAI_API_KEY;
@@ -15,24 +16,58 @@ const vite = await createViteServer({
 });
 app.use(vite.middlewares);
 
-const sessionConfig = JSON.stringify({
-  session: {
-    type: "realtime",
-    model: "gpt-realtime",
-    audio: {
-      output: {
-        voice: "marin",
+// 8 Miles - Freestyle Rap Battle
+const systemPrompt = `You are 8 Miles, a freestyle rapper in a rap battle. ONLY rap - no teaching, no explanations, no hints.
+
+RULES:
+- Say 2 lines that rhyme, then STOP and wait for the user
+- After user responds, say "Ayy!" or "Yeah!" then your next 2 lines
+- Keep it simple and fun
+- Use the rhyme sound: -ide (ride, hide, side, pride, wide, guide)
+
+EXAMPLE:
+You: "Yo I'm 8 Miles, let me be your guide / Step into the booth, feel the vibe inside"
+User: "..."
+You: "Ayy! Now we rolling with the flow so wide / Every word you speak is a source of pride"
+
+START with your opening 2 lines using -ide rhymes. Be brief.`;
+
+// Build session config with custom settings
+function buildSessionConfig(settings = {}) {
+  const model = settings.model || "gpt-realtime";
+  const voice = settings.voice || "shimmer";
+  const vadMode = settings.vadMode || "semantic_vad";
+  const speed = settings.speed || 1.0;
+
+  const config = {
+    session: {
+      type: "realtime",
+      model,
+      instructions: systemPrompt,
+      audio: {
+        input: {
+          turn_detection:
+            vadMode === "disabled"
+              ? null
+              : { type: vadMode },
+        },
+        output: {
+          voice,
+          speed,
+        },
       },
     },
-  },
-});
+  };
+
+  return JSON.stringify(config);
+}
 
 // All-in-one SDP request (experimental)
 app.post("/session", async (req, res) => {
   const fd = new FormData();
   console.log(req.body);
   fd.set("sdp", req.body);
-  fd.set("session", sessionConfig);
+  fd.set("session", buildSessionConfig());
 
   const r = await fetch("https://api.openai.com/v1/realtime/calls", {
     method: "POST",
@@ -49,9 +84,12 @@ app.post("/session", async (req, res) => {
   res.send(sdp);
 });
 
-// API route for ephemeral token generation
-app.get("/token", async (req, res) => {
+// API route for ephemeral token generation with custom settings
+app.post("/token", async (req, res) => {
   try {
+    const settings = req.body || {};
+    const sessionConfig = buildSessionConfig(settings);
+
     const response = await fetch(
       "https://api.openai.com/v1/realtime/client_secrets",
       {
@@ -65,7 +103,7 @@ app.get("/token", async (req, res) => {
     );
 
     const data = await response.json();
-    res.json(data);
+    res.json({ ...data, model: settings.model || "gpt-realtime" });
   } catch (error) {
     console.error("Token generation error:", error);
     res.status(500).json({ error: "Failed to generate token" });
