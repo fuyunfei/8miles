@@ -5,12 +5,14 @@ import BattleLog from "./BattleLog";
 import SessionControls from "./SessionControls";
 import RhymePanel from "./RhymePanel";
 import SettingsPanel from "./SettingsPanel";
+import FeedbackOverlay from "./FeedbackOverlay";
+import LiveTranscript from "./LiveTranscript";
+import { getMode } from "../lib/modes";
 
 export default function App() {
   const [isSessionActive, setIsSessionActive] = useState(false);
   const [events, setEvents] = useState([]);
   const [dataChannel, setDataChannel] = useState(null);
-  const [currentRhyme, setCurrentRhyme] = useState(null);
   const [showBattleView, setShowBattleView] = useState(true); // 默认显示Battle视图
   const [sessionSettings, setSessionSettings] = useState(null);
   const peerConnection = useRef(null);
@@ -129,10 +131,6 @@ export default function App() {
     sendClientEvent({ type: "response.create" });
   }
 
-  // Handle rhyme change from RhymePanel
-  const handleRhymeChange = useCallback((rhyme) => {
-    setCurrentRhyme(rhyme);
-  }, []);
 
   // Handle settings change from SettingsPanel
   const handleSettingsChange = useCallback((settings) => {
@@ -167,7 +165,7 @@ export default function App() {
 
   return (
     <>
-      <nav className="absolute top-0 left-0 right-0 h-16 flex items-center">
+      <nav className="absolute top-0 left-0 right-0 h-16 flex items-center z-20 bg-white/80 backdrop-blur-sm">
         <div className="flex items-center gap-4 w-full m-4 pb-2 border-0 border-b border-solid border-gray-200">
           <img style={{ width: "24px" }} src={logo} />
           <h1>8 Miles</h1>
@@ -188,10 +186,18 @@ export default function App() {
         </div>
       </nav>
       <main className="absolute top-16 left-0 right-0 bottom-0">
+        <FeedbackOverlay 
+          events={events} 
+          currentRhyme={sessionSettings?.rhyme} 
+        />
+        <LiveTranscript 
+          events={events} 
+          rhymeWords={sessionSettings?.rhyme?.words || []} 
+        />
         <section className="absolute top-0 left-0 right-[380px] bottom-0 flex">
           <section className="absolute top-0 left-0 right-0 bottom-32 px-4 overflow-y-auto">
             {showBattleView ? (
-              <BattleLog events={events} rhymeWords={currentRhyme?.words || []} />
+              <BattleLog events={events} rhymeWords={sessionSettings?.rhyme?.words || []} />
             ) : (
               <EventLog events={events} />
             )}
@@ -214,7 +220,8 @@ export default function App() {
           />
           <RhymePanel
             isSessionActive={isSessionActive}
-            onRhymeChange={handleRhymeChange}
+            currentRhyme={sessionSettings?.rhyme}
+            showHints={getMode(sessionSettings?.mode).ui.showHints}
           />
         </section>
       </main>

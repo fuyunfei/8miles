@@ -136,15 +136,22 @@ export default function BattleLog({ events, rhymeWords = [] }) {
   // 从events中提取已完成的对话消息（去重）
   const completedMessages = events
     .filter((event) => {
+      // 用户文本输入
       if (event.type === "conversation.item.create" && event.item?.role === "user") {
         return true;
       }
+      // 用户语音输入转录 (关键！之前缺失这个)
+      if (event.type === "conversation.item.input_audio_transcription.completed") {
+        return true;
+      }
+      // AI 语音转录
       if (event.type === "response.output_audio_transcript.done") {
         return true;
       }
       return false;
     })
     .map((event) => {
+      // 用户文本输入
       if (event.type === "conversation.item.create") {
         return {
           id: event.event_id,
@@ -152,6 +159,15 @@ export default function BattleLog({ events, rhymeWords = [] }) {
           content: event.item?.content?.[0]?.text || "",
         };
       }
+      // 用户语音输入转录
+      if (event.type === "conversation.item.input_audio_transcription.completed") {
+        return {
+          id: event.item_id || event.event_id, // 使用 item_id 去重
+          role: "user",
+          content: event.transcript || "",
+        };
+      }
+      // AI 语音转录
       if (event.type === "response.output_audio_transcript.done") {
         return {
           id: event.event_id,
@@ -162,6 +178,8 @@ export default function BattleLog({ events, rhymeWords = [] }) {
       return null;
     })
     .filter((msg) => msg && msg.content)
+    // 按 id 去重，避免同一消息显示多次
+    .filter((msg, index, self) => self.findIndex(m => m.id === msg.id) === index)
     .reverse();
 
   const messages = completedMessages;

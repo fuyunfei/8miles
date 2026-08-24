@@ -1,7 +1,17 @@
 import express from "express";
 import fs from "fs";
 import { createServer as createViteServer } from "vite";
-import "dotenv/config";
+import dotenv from "dotenv";
+dotenv.config({ override: true });
+import { ProxyAgent, setGlobalDispatcher } from "undici";
+
+// Setup proxy if HTTPS_PROXY or HTTP_PROXY is set
+const proxyUrl = process.env.HTTPS_PROXY || process.env.HTTP_PROXY;
+if (proxyUrl) {
+  const proxyAgent = new ProxyAgent(proxyUrl);
+  setGlobalDispatcher(proxyAgent);
+  console.log(`Using proxy: ${proxyUrl}`);
+}
 
 const app = express();
 app.use(express.json());
@@ -38,18 +48,22 @@ function buildSessionConfig(settings = {}) {
   const voice = settings.voice || "shimmer";
   const vadMode = settings.vadMode || "semantic_vad";
   const speed = settings.speed || 1.0;
+  const instructions = settings.systemPrompt || systemPrompt;
 
   const config = {
     session: {
       type: "realtime",
       model,
-      instructions: systemPrompt,
+      instructions,
       audio: {
         input: {
           turn_detection:
             vadMode === "disabled"
               ? null
               : { type: vadMode },
+          transcription: {
+            model: "gpt-4o-transcribe",
+          },
         },
         output: {
           voice,

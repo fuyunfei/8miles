@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react";
-import { Settings } from "react-feather";
+import { Settings, ChevronDown, ChevronUp } from "react-feather";
+import { RHYME_SETS, TOPICS, getAllModes, getMode, buildSystemPrompt } from "../lib/modes";
 
 // Available models
 const MODELS = [
   { id: "gpt-realtime", name: "GPT Realtime", description: "Latest stable" },
   { id: "gpt-4o-realtime-preview", name: "GPT-4o Realtime", description: "Full featured" },
   { id: "gpt-4o-mini-realtime-preview", name: "GPT-4o Mini Realtime", description: "Faster & cheaper" },
-  { id: "gpt-realtime-mini", name: "GPT Realtime Mini", description: "Lightweight" },
 ];
 
 // Available voices
@@ -14,20 +14,20 @@ const VOICES = [
   { id: "shimmer", name: "Shimmer", description: "Warm, engaging" },
   { id: "alloy", name: "Alloy", description: "Neutral, balanced" },
   { id: "echo", name: "Echo", description: "Soft, gentle" },
-  { id: "fable", name: "Fable", description: "Expressive" },
   { id: "onyx", name: "Onyx", description: "Deep, authoritative" },
   { id: "nova", name: "Nova", description: "Friendly, upbeat" },
-  { id: "marin", name: "Marin", description: "Clear, natural" },
 ];
 
 // VAD modes
 const VAD_MODES = [
-  { id: "semantic_vad", name: "Semantic VAD", description: "AI detects when you finish speaking" },
-  { id: "server_vad", name: "Server VAD", description: "Silence-based detection" },
-  { id: "disabled", name: "Push to Talk", description: "Manual control" },
+  { id: "semantic_vad", name: "Semantic VAD", description: "AI detects speech end" },
+  { id: "server_vad", name: "Server VAD", description: "Silence-based" },
 ];
 
 const DEFAULT_SETTINGS = {
+  mode: "practice",
+  rhyme: RHYME_SETS[0],
+  topic: TOPICS[0].id,
   model: "gpt-realtime",
   voice: "shimmer",
   vadMode: "semantic_vad",
@@ -36,12 +36,13 @@ const DEFAULT_SETTINGS = {
 
 export default function SettingsPanel({ onSettingsChange, disabled = false }) {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
-  // Notify parent of settings changes
+  // Generate system prompt and notify parent
   useEffect(() => {
     if (onSettingsChange) {
-      onSettingsChange(settings);
+      const systemPrompt = buildSystemPrompt(settings.mode, settings.rhyme, settings.topic);
+      onSettingsChange({ ...settings, systemPrompt });
     }
   }, [settings, onSettingsChange]);
 
@@ -49,21 +50,99 @@ export default function SettingsPanel({ onSettingsChange, disabled = false }) {
     setSettings((prev) => ({ ...prev, [key]: value }));
   }
 
+  const currentMode = getMode(settings.mode);
+  const allModes = getAllModes();
+
   return (
     <div className="mb-4">
-      {/* Header */}
+      {/* Mode Selection - Always Visible */}
+      <div className="mb-4">
+        <label className="block text-xs font-medium text-gray-500 mb-2">
+          Mode
+        </label>
+        <div className="grid grid-cols-3 gap-2">
+          {allModes.map((mode) => (
+            <button
+              key={mode.id}
+              onClick={() => updateSetting("mode", mode.id)}
+              disabled={disabled}
+              className={`p-3 rounded-lg text-center transition-all ${
+                settings.mode === mode.id
+                  ? "bg-purple-600 text-white shadow-lg scale-105"
+                  : "bg-white border border-gray-200 hover:border-purple-400"
+              } disabled:opacity-50 disabled:cursor-not-allowed`}
+            >
+              <div className="text-2xl mb-1">{mode.icon}</div>
+              <div className="text-sm font-semibold">{mode.name}</div>
+            </button>
+          ))}
+        </div>
+        <p className="mt-2 text-xs text-gray-500 text-center">
+          {currentMode.description}
+        </p>
+      </div>
+
+      {/* Rhyme Selection */}
+      <div className="mb-4">
+        <label className="block text-xs font-medium text-gray-500 mb-2">
+          Rhyme Sound
+        </label>
+        <div className="grid grid-cols-4 gap-2">
+          {RHYME_SETS.map((rhyme) => (
+            <button
+              key={rhyme.sound}
+              onClick={() => updateSetting("rhyme", rhyme)}
+              disabled={disabled}
+              className={`px-2 py-2 text-sm font-bold rounded-lg transition-all ${
+                settings.rhyme.sound === rhyme.sound
+                  ? "bg-purple-600 text-white"
+                  : "bg-white border border-gray-200 hover:border-purple-400"
+              } disabled:opacity-50 disabled:cursor-not-allowed`}
+            >
+              {rhyme.sound}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Topic Selection - Only for Challenge mode */}
+      {settings.mode === "challenge" && (
+        <div className="mb-4">
+          <label className="block text-xs font-medium text-gray-500 mb-2">
+            Topic
+          </label>
+          <div className="grid grid-cols-2 gap-2">
+            {TOPICS.map((topic) => (
+              <button
+                key={topic.id}
+                onClick={() => updateSetting("topic", topic.id)}
+                disabled={disabled}
+                className={`px-3 py-2 text-sm rounded-lg transition-all ${
+                  settings.topic === topic.id
+                    ? "bg-orange-500 text-white"
+                    : "bg-white border border-gray-200 hover:border-orange-400"
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                {topic.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Advanced Settings Toggle */}
       <button
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-800 mb-2"
+        onClick={() => setShowAdvanced(!showAdvanced)}
+        className="flex items-center gap-2 text-xs text-gray-500 hover:text-gray-700 mb-2"
       >
-        <Settings size={16} />
-        <span>Settings</span>
-        <span className="text-xs">{isExpanded ? "▼" : "▶"}</span>
+        <Settings size={14} />
+        <span>Advanced Settings</span>
+        {showAdvanced ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
       </button>
 
-      {isExpanded && (
-        <div className="space-y-4 p-3 bg-gray-50 rounded-lg">
-          {/* Model Selection */}
+      {showAdvanced && (
+        <div className="space-y-3 p-3 bg-gray-50 rounded-lg">
+          {/* Model */}
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">
               Model
@@ -72,17 +151,17 @@ export default function SettingsPanel({ onSettingsChange, disabled = false }) {
               value={settings.model}
               onChange={(e) => updateSetting("model", e.target.value)}
               disabled={disabled}
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white disabled:bg-gray-100 disabled:cursor-not-allowed"
+              className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded bg-white disabled:bg-gray-100"
             >
               {MODELS.map((model) => (
                 <option key={model.id} value={model.id}>
-                  {model.name} - {model.description}
+                  {model.name}
                 </option>
               ))}
             </select>
           </div>
 
-          {/* Voice Selection */}
+          {/* Voice */}
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">
               Voice
@@ -91,11 +170,11 @@ export default function SettingsPanel({ onSettingsChange, disabled = false }) {
               value={settings.voice}
               onChange={(e) => updateSetting("voice", e.target.value)}
               disabled={disabled}
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white disabled:bg-gray-100 disabled:cursor-not-allowed"
+              className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded bg-white disabled:bg-gray-100"
             >
               {VOICES.map((voice) => (
                 <option key={voice.id} value={voice.id}>
-                  {voice.name} - {voice.description}
+                  {voice.name}
                 </option>
               ))}
             </select>
@@ -110,11 +189,11 @@ export default function SettingsPanel({ onSettingsChange, disabled = false }) {
               value={settings.vadMode}
               onChange={(e) => updateSetting("vadMode", e.target.value)}
               disabled={disabled}
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white disabled:bg-gray-100 disabled:cursor-not-allowed"
+              className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded bg-white disabled:bg-gray-100"
             >
               {VAD_MODES.map((mode) => (
                 <option key={mode.id} value={mode.id}>
-                  {mode.name} - {mode.description}
+                  {mode.name}
                 </option>
               ))}
             </select>
@@ -128,25 +207,20 @@ export default function SettingsPanel({ onSettingsChange, disabled = false }) {
             <input
               type="range"
               min="0.5"
-              max="2.0"
+              max="1.5"
               step="0.1"
               value={settings.speed}
               onChange={(e) => updateSetting("speed", parseFloat(e.target.value))}
               disabled={disabled}
-              className="w-full disabled:cursor-not-allowed"
+              className="w-full"
             />
-            <div className="flex justify-between text-xs text-gray-400">
-              <span>0.5x</span>
-              <span>1.0x</span>
-              <span>2.0x</span>
-            </div>
           </div>
+        </div>
+      )}
 
-          {disabled && (
-            <div className="text-xs text-yellow-600 bg-yellow-50 p-2 rounded">
-              Settings can only be changed before starting a session
-            </div>
-          )}
+      {disabled && (
+        <div className="mt-3 text-xs text-yellow-600 bg-yellow-50 p-2 rounded">
+          Stop session to change settings
         </div>
       )}
     </div>
